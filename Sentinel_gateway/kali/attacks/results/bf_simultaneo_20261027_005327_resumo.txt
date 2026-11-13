@@ -1,0 +1,64 @@
+================================================================================
+          SENTINEL WAF — RELATÓRIO DE DESEMPENHO E CONCORRÊNCIA HTTP
+================================================================================
+Data/Hora de Conclusão : 2026-10-27 00:53:29 UTC
+Arquivo CSV Detalhado  : /attacks/results/bf_simultaneo_20261027_005327.csv
+Arquivo de Resumo      : /attacks/results/bf_simultaneo_20261027_005327_resumo.txt
+
+--------------------------------------------------------------------------------
+1. PARÂMETROS DO TESTE
+--------------------------------------------------------------------------------
+Alvo (URL de Destino)  : http://owasp-lab-sentinel-gateway/login.php
+Método HTTP            : POST
+Content-Type           : application/x-www-form-urlencoded
+Operações Simultâneas  : 50 workers paralelos
+Requisições Planejadas : 50
+Timeout por Requisição : 5s total (conexão: 2s)
+Modelo de Transporte   : Concorrência real de processos Bash (curl por requisição)
+                         Conexões TCP individuais (sem reaproveitamento keep-alive)
+
+--------------------------------------------------------------------------------
+2. RESUMO DE EXECUÇÃO E VAZÃO
+--------------------------------------------------------------------------------
+Requisições Planejadas : 50
+Requisições Executadas : 50 (100.0%)
+Respostas Recebidas    : 50
+Falhas de Transporte   : 0
+Duração Total          : 2.230 segundos
+Vazão Observada (RPS)  : 22.42 requisições/segundo
+
+--------------------------------------------------------------------------------
+3. DISTRIBUIÇÃO DAS RESPOSTAS HTTP
+--------------------------------------------------------------------------------
+- Respostas 2xx (Sucesso / Tela Login) : 0     (0.0%)
+- Respostas 3xx (Redirecionamentos)    : 0     (0.0%)
+- Respostas 4xx (Erros do Cliente/WAF) : 50    (100.0%)
+  * HTTP 429 Too Many Requests         : 0
+  * HTTP 403 Forbidden                 : 50
+  * HTTP 400 Bad Request               : 0
+- Respostas 5xx (Erros de Servidor)    : 0     (0.0%)
+- Falhas de Conexão / Timeout (000)    : 0     (0.0%)
+
+--------------------------------------------------------------------------------
+4. ANÁLISE DE SEGURANÇA E ATRIBUIÇÃO AO WAF
+--------------------------------------------------------------------------------
+[+] Bloqueios Confirmados pelo WAF        : 50
+    * Rate Limiting (BRUTE_FORCE_LOGIN)   : 0
+    * Lista Negra em RAM (IP_BLOCKLIST)   : 50
+    * Política de Senha (WEAK_PASSWORD)   : 0
+[+] Processadas pela Aplicação (Backend)  : 0
+    * Falhas de Login (HTTP 200 backend)  : 0
+    * Sucesso de Login (HTTP 302 backend) : 0
+[?] Respostas Inconclusivas               : 0
+
+--------------------------------------------------------------------------------
+5. ESTATÍSTICAS DE LATÊNCIA (TEMPO DE RESPOSTA EM MILISSEGUNDOS)
+--------------------------------------------------------------------------------
+Amostras Válidas de Latência : 50
+Mínima                       : 12.20 ms
+Média                        : 49.46 ms
+Máxima                       : 106.23 ms
+Percentil 50 (Mediana P50)   : 46.95 ms
+Percentil 95 (P95)           : 69.27 ms
+Percentil 99 (P99)           : 103.85 ms
+================================================================================

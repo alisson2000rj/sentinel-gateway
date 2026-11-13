@@ -1,0 +1,138 @@
+version: '3.8'
+
+# ============================================================
+# VULNBOX LAB — Docker Compose com Sentinel Security Gateway
+#
+# Topologia:
+#   [kali-attacker] ─── frontend-net ──→ [owasp-lab-sentinel-gateway (WAF)]
+#                                              │
+#                                         backend-net
+#                                        ┌────┴────┐
+#                                  [web]         [mysql]
+#
+# Portas expostas no host:
+#   8080 → owasp-lab-sentinel-gateway (acesso via browser e ataques externos)
+#   web e mysql NÃO são acessíveis diretamente do host.
+#
+# NÃO expor a Internet ou redes de produção
+# ============================================================
+
+services:
+
+  # ── Aplicação Web (PHP + Apache) ──────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        APP_UID: ${HOST_UID:-1000}
+        APP_GID: ${HOST_GID:-1000}
+    container_name: owasp-lab-vunlbox-lab
+    # SEM ports: acessível somente via gateway
+    volumes:
+      - ./.env:/var/www/html/.env
+      - ./public:/var/www/html/public
+      - ./src:/var/www/html/src
+      - ./assets:/var/www/html/assets
+      - ./database:/var/www/html/database
+    environment:
+      DB_HOST: ${DB_HOST:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-vulnbox_lab}
+      DB_USER: ${DB_USER:-labuser}
+      DB_PASS: ${DB_PASS:-labpass123}
+      APP_MODE: ${APP_MODE:-vulnerable}
+      SESSION_LIFETIME: ${SESSION_LIFETIME:-1800}
+      MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS:-5}
+      LOCKOUT_MINUTES: ${LOCKOUT_MINUTES:-15}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      backend-net:
+        ipv4_address: 172.19.0.4
+    restart: unless-stopped
+
+  # ── Banco de Dados MySQL ───────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: vulnbox-lab-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpass123}
+      MYSQL_DATABASE: ${DB_NAME:-vulnbox_lab}
+      MYSQL_USER: ${DB_USER:-labuser}
+      MYSQL_PASSWORD: ${DB_PASS:-labpass123}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    # SEM ports: acessível somente via backend-net
+    networks:
+      backend-net:
+        ipv4_address: 172.19.0.3
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpass123"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ── Sentinel Security Gateway (nginx + WAF Lua) ───────────
+  sentinel-gateway:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: owasp-lab-sentinel-gateway
+    environment:
+      WAF_MODE: ${WAF_MODE:-active}
+    ports:
+      - "8080:80"           # Único ponto de entrada para o lab
+    volumes:
+      - ./gateway/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./gateway/waf:/etc/gateway/waf
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.2
+      backend-net:
+        ipv4_address: 172.19.0.2
+    depends_on:
+      - web
+    restart: unless-stopped
+
+  # ── Kali Linux Attacker (efêmero) ─────────────────────────
+  kali-attacker:
+    build:
+      context: ./kali
+      dockerfile: Dockerfile
+    container_name: kali-attacker
+    environment:
+      TARGET: http://owasp-lab-sentinel-gateway    # resolve via DNS interno Docker
+    networks:
+      frontend-net:
+        ipv4_address: 172.20.0.3
+    volumes:
+      - ./kali/attacks:/attacks
+    stdin_open: true
+    tty: true
+    # Efêmero: não persiste dados entre sessões
+
+# ── Volumes ────────────────────────────────────────────────
+volumes:
+  mysql-data:
+    driver: local
+
+# ── Redes ──────────────────────────────────────────────────
+networks:
+  # Zona atacante: Kali ↔ Gateway
+  frontend-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+  # Zona protegida: Gateway ↔ Web ↔ MySQL
+  backend-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.19.0.0/16
